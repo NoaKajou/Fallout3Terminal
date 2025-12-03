@@ -1,58 +1,78 @@
-# Fallout3Terminal
+# Fallout3Terminal (fork)
 
-Fallout3Terminal is my own version of a Fallout 3/4/NV Terminal operating system, complete with the ability to write journal entries, and in-game sounds from Fallout 3 itself! I tried to recreate as many little details there are in the games, like the RobCo OS header and such, though you will notice I took quite a few liberties.
+This repository is a fork of the original project by fohtla: https://github.com/fohtla/Fallout3Terminal
 
-This is actually just a bash script that can be run from the terminal, and the output is displaying on a highly customizable retro terminal called cool-retro-terminal. 
+Overview
 
-See my demonstration video of this on reddit, the post can be found here:
+- A retro-styled terminal interface inspired by Fallout's RobCo terminals, implemented as a Bash script.
+- Lets you view, create, edit and delete "journal entries" stored under the `entries/` directory.
+- Includes sound effects (.wav) and a typewriter-style display using `pv`.
 
-[https://www.reddit.com/r/linux/comments/dw9gfw/i_recreated_a_fallout_3_terminal_as_a_linux_bash/](https://www.reddit.com/r/linux/comments/dw9gfw/i_recreated_a_fallout_3_terminal_as_a_linux_bash/)
+Key features
 
-# REQUIREMENTS
+- Browse entries and nested folders from `entries/`.
+- Create and edit entries (the script opens `nano` for interactive editing by default).
+- Delete entries with confirmation.
+- Run small executable "holotape" games stored in `holotapes/`.
 
-You must have the following:
+Dependencies (example for Debian/Ubuntu)
 
-* Linux based or MacOS operating system
-* The following packages installed:
-    * pv
-    * cool-retro-term
-    * sox
+```bash
+sudo apt update
+sudo apt install -y bash pv sox fzf nano findutils sed procps
+# 'play' comes from sox; 'pv' for typewriter effect; 'fzf' for interactive menus
+```
 
-This has not been tested on Windows or *BSD operating systems.
+Optional
 
-Thanks to gitHub user iFloris, there are now instructions to run this on MacOS! Read on below.
+- `cool-retro-term` can be used to show the interface in a retro window (optional).
 
-# Download and run Fallout3Terminal in Linux
-
-To run this script clone this repository, make "terminalscript" an executable , and run `cool-retro-term` as follows:
+Installation
 
 ```bash
 git clone https://github.com/fohtla/Fallout3Terminal
-chmod +x $HOME/Fallout3Terminal/terminalscript
-cool-retro-term --fullscreen --noclose -e bash $HOME/Fallout3Terminal/terminalscript
+cd Fallout3Terminal
+chmod +x terminalscript
 ```
 
-You can also enter that command in your startup manager, as well as make launcher with it!
+Run
 
-# Download and Run Fallout3Terminal on MacOS
+```bash
+# Run directly in your terminal
+./terminalscript
 
- ( Instructions provided by user iFloris! )
-
-* Have homebrew installed
-   * Run the following:
-```
-brew install sox pv
-brew cask install cool-retro-term
-git clone https://github.com/fohtla/Fallout3Terminal
-/Applications/cool-retro-term.app/Contents/MacOS/cool-retro-term --fullscreen --noclose -e bash $HOME/Fallout3Terminal/terminalscript
+# Or inside cool-retro-term (if installed)
+cool-retro-term --fullscreen --noclose -e bash "$PWD/terminalscript"
 ```
 
-# Additional notes
+Editing entries
 
-Thank you for your interest in this! This was just a little side project that I made while sick at home, but a lot of people wanted a download!
+- The script launches `nano` for entry creation and editing so you can navigate with the arrow keys.
+- In `nano`: use the arrow keys to move between lines. Save & exit with `Ctrl+X`, then `Y` (if prompted) and `Enter`.
+- Note: the original project also supports a non-interactive mode using `cat > file` which finishes on `Ctrl+D` (this overwrites the file).
 
-I have decided not to leave my preset for CRT in, as some people might want to give a shot at making their own CRT preset.
-Give it a shot! You might want to try a New Vegas amber look!
+Repository layout
 
-Believe it or not, I don't actually do a lot of this kind of thing, and I instead do a lot of Digital Art! I'm still learning, but you can check me out on [@fohtla_arts](http://instagram.com/fohtla_arts) on instagram. Otherwise, enjoy this little program I made for funsies!
+- `terminalscript` — main Bash script.
+- `entries/` — directory containing text entries; nested folders are supported.
+- `greeterheader.txt`, `ui_*.wav` — UI and audio assets.
+- `holotapes/` — place executables here to show them in the "Load Holotape" menu.
 
+Customization
+
+- To change the editor, edit the `terminalscript` and replace occurrences of `nano` with your preferred editor or command.
+- To use Ctrl+D saving behavior, replace `nano "path"` calls with `cat >"path"` (user types content and presses `Ctrl+D` to finish). Be aware `cat` will overwrite existing files.
+
+Fork note
+
+- This is a fork of `fohtla/Fallout3Terminal`. See the project's Git history for specific local changes made in this fork.
+
+License
+
+- See `LICENSE.md` in this repository.
+
+Contributing
+
+- Feel free to open an issue or a pull request with improvements or bug fixes.
+
+Enjoy the retro terminal!

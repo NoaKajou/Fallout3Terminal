@@ -1,3 +1,7 @@
+# Fonction utilitaire pour lister les fichiers avec chemin relatif à entries/
+list_entries() {
+    find "$BASE_DIR/entries" -type f | sed "s|$BASE_DIR/entries/||"
+}
 #!/usr/bin/env bash
 
 BASE_DIR="$(cd "$(dirname "$0")"; pwd)" || exit 2
@@ -32,230 +36,466 @@ ___________________________________________________'
 #Main Menu Screen
 mainmenufunc () 
 {
-clear
 
-#display the Menu text
-play -q $BASE_DIR/ui_hacking_charscroll.wav
-display_center "$BASE_DIR/greeterheader.txt" | pv -qL 80
-echo "$greeter" | pv -qL 80
-play -q $BASE_DIR/ui_hacking_charscroll.wav
-echo What would you like to do? | pv -qL 80
+    clear
 
-#Display the menu options
-COLUMNS=12
-select menuchoice in "View Journal Entries" "Log a Journal Entry" "Delete a Journal Entry" "Proceed to Desktop"
-do
+    #display the Menu text
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    display_center "$BASE_DIR/greeterheader.txt" | pv -qL 80
+    echo "$greeter" | pv -qL 80
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    echo What would you like to do? | pv -qL 80
+
+    actions=("View Journal Entries" "Log a Journal Entry" "Delete a Journal Entry" "Edit a Journal Entry" "Load Holotape" "Proceed to Desktop")
+    menuchoice=$(printf "%s\n" "${actions[@]}" | fzf --height=10 --border --reverse --no-multi --prompt="" --disabled --phony)
+
     case $menuchoice in
-    "View Journal Entries")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    viewentriesfunc
-    ;;
-    "Log a Journal Entry")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-   writeentryfunc
-    ;;
-    "Delete a Journal Entry")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    deleteentryfunc
-    ;;
-    "Proceed to Desktop")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    echo Goodbye! && exit
-    ;;
-    *)
-    play -q $BASE_DIR/ui_hacking_passbad.wav
-    ;;
+        "View Journal Entries")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            viewentriesfunc
+            ;;
+        "Log a Journal Entry")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            writeentryfunc
+            ;;
+        "Delete a Journal Entry")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            deleteentryfunc
+            ;;
+        "Edit a Journal Entry")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            editentryfunc
+            ;;
+        "Load Holotape")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            holotapemenufunc
+            ;;
+        "Proceed to Desktop")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            echo Goodbye! && exit
+            ;;
+        *)
+            play -q $BASE_DIR/ui_hacking_passbad.wav
+            ;;
     esac
-done
+
 }
 
 
 #Option 1 Menu, Viewing Journal Entries
-viewentriesfunc () 
-{
-#adding all the text files as individual strings to be used as a selection menu
-entrylist=('Go Back')
-rawentry="$(find $BASE_DIR/entries -type f)"
-for i in $rawentry; do
-i=${i##*/}
-entrylist+=("$i")
-done
+viewentriesfunc () {
+    # Navigation type explorateur
+    local current_path="$1"
+    [ -z "$current_path" ] && current_path="."
+    local abs_path="$BASE_DIR/entries/$current_path"
+    # Liste fichiers et dossiers
+    local entries=("Go Back")
+    # Fichiers en minuscules
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        entries+=("$(echo "$f" | tr '[:upper:]' '[:lower:]')")
+    done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type f -printf '%f\n')
+    # Dossiers en MAJUSCULES
+    while IFS= read -r d; do
+        [ -z "$d" ] && continue
+        [ "$d" = "." ] && continue
+        dname="$(basename "$d")"
+        # Ne pas afficher le dossier courant dans sa propre liste
+        if [ "$dname" != "$(basename "$abs_path")" ]; then
+            entries+=("$(echo "$dname" | tr '[:lower:]' '[:upper:]')")
+        fi
+    done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
 
-#display the Menu text
     clear
     display_center "$BASE_DIR/greeterheader.txt"
-    echo "$greeter" 
+    echo "$greeter"
     play -q $BASE_DIR/ui_hacking_charscroll.wav
-    echo Which Journal Entry would you like to access? | pv -qL 80
-    
-    #display the menu options
-    COLUMNS=12
-    select readoption in ${entrylist[@]}
-    do
-    case $readoption in
-    "Go Back")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    repeatmainmenufunc
-    ;;
+    echo "Sélectionnez un fichier ou un dossier :" | pv -qL 80
+    choice=$(printf "%s\n" "${entries[@]}" | fzf --height=10 --border --reverse --no-multi --prompt="" --bind 'tab:accept')
+    case $choice in
+        "Go Back"|$'\t')
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            if [ "$current_path" = "." ]; then
+                repeatmainmenufunc
+            else
+                # remonter d'un dossier
+                parent_path="${current_path%/*}"
+                [ -z "$parent_path" -o "$parent_path" = "$current_path" ] && parent_path="."
+                viewentriesfunc "$parent_path"
+            fi
+            ;;
+        "")
+            repeatmainmenufunc
+            ;;
         *)
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    ;;
+            # Si le choix est en MAJUSCULES, c'est un dossier
+            if [[ "$choice" =~ ^[A-Z0-9_-]+$ ]]; then
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                folder_name="$choice"
+                # retrouver le vrai nom du dossier (sensible à la casse)
+                real_folder=""
+                while IFS= read -r d; do
+                    dname="$(basename "$d")"
+                    if [ "$(echo "$dname" | tr '[:lower:]' '[:upper:]')" = "$folder_name" ]; then
+                        real_folder="$dname"
+                        break
+                    fi
+                done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+                if [ "$current_path" = "." ]; then
+                    viewentriesfunc "$real_folder"
+                else
+                    viewentriesfunc "$current_path/$real_folder"
+                fi
+            else
+                # fichier (toujours en minuscules)
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                clear
+                display_center "$BASE_DIR/greeterheader.txt"
+                echo "$greeter"
+                echo
+                play -q $BASE_DIR/ui_hacking_charscroll.wav
+                echo "$choice:"  | pv -qL 80
+                play -q $BASE_DIR/ui_hacking_charscroll.wav
+                # retrouver le vrai nom du fichier (sensible à la casse)
+                real_file=""
+                while IFS= read -r f; do
+                    if [ "$(echo "$f" | tr '[:upper:]' '[:lower:]')" = "$choice" ]; then
+                        real_file="$f"
+                        break
+                    fi
+                done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type f -printf '%f\n')
+                if [ "$current_path" = "." ]; then
+                    cat "$BASE_DIR/entries/$real_file"  | pv -qL 80
+                else
+                    cat "$BASE_DIR/entries/$current_path/$real_file"  | pv -qL 80
+                fi
+                echo
+                read -p "Press enter to continue"
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                repeatmainmenufunc
+            fi
+            ;;
     esac
-
-    #displays the selected entry
-    clear
-   display_center "$BASE_DIR/greeterheader.txt"
-   echo "$greeter"
-    echo
-    play -q $BASE_DIR/ui_hacking_charscroll.wav
-    echo "$readoption:"  | pv -qL 80
-    play -q $BASE_DIR/ui_hacking_charscroll.wav
-    cat< "$BASE_DIR/entries/$readoption"  | pv -qL 80
-    echo
-    read -p "Press enter to continue"
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    
-    #goes back to main menu
-    repeatmainmenufunc
-    done
 }
 
 #menu for writing an entry
 writeentryfunc () 
 {
-
-#displays menu text
-clear
-display_center "$BASE_DIR/greeterheader.txt"
-echo "$greeter" 
-play -q $BASE_DIR/ui_hacking_charscroll.wav
-echo "What would you like to name the entry?" | pv -qL 80
-
-#reads user input
-read entrynameinput 
-play -q $BASE_DIR/ui_hacking_charenter_01.wav
-
-#displays menu text again
-clear
-display_center "$BASE_DIR/greeterheader.txt"
-echo "$greeter" 
-play -q $BASE_DIR/ui_hacking_charscroll.wav
-echo Press CTRL+D to finalise entry  | pv -qL 80
-play -q $BASE_DIR/ui_hacking_charscroll.wav
-echo $entrynameinput:  | pv -qL 80
-echo
-#uses cat text editor to write entries. ctrl+d to finish
-cat >"$BASE_DIR/entries/$entrynameinput"
-cat "$BASE_DIR/entries/$entrynameinput"
-clear
-play -q $BASE_DIR/ui_hacking_charenter_01.wav
-
-#returns to mainmenu
-repeatmainmenufunc
-
-
-}
-
-#menu to delete an entry
-deleteentryfunc () 
-{
-
-#adding all the text files as individual strings to be used as a selection menu
-entrylist=('Go Back')
-rawentry="$(find $BASE_DIR/entries -type f)"
-for i in $rawentry; do
-i=${i##*/}
-entrylist+=("$i")
-done
-
-    #displays menu text
     clear
     display_center "$BASE_DIR/greeterheader.txt"
     echo "$greeter" 
     play -q $BASE_DIR/ui_hacking_charscroll.wav
-    echo Which Journal Entry would you like to delete? | pv -qL 80
-    
-    #displays menu options
-    COLUMNS=12
-    select readoption in ${entrylist[@]}
-    do
-    case $readoption in
-    "Go Back")
+    echo "Dans quel dossier voulez-vous stocker l'entrée ? (laisser vide pour racine, ou tapez par ex : sujet1/sousdossier)" | pv -qL 80
+    read entryfolderinput
+    if [ -n "$entryfolderinput" ]; then
+        mkdir -p "$BASE_DIR/entries/$entryfolderinput"
+    fi
+    play -q $BASE_DIR/ui_hacking_charenter_01.wav
+    clear
+    display_center "$BASE_DIR/greeterheader.txt"
+    echo "$greeter" 
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    echo "Quel nom pour l'entrée ?" | pv -qL 80
+    read entrynameinput
+    play -q $BASE_DIR/ui_hacking_charenter_01.wav
+    clear
+    display_center "$BASE_DIR/greeterheader.txt"
+    echo "$greeter" 
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    echo "Press CTRL+D to finalise entry"  | pv -qL 80
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    echo "$entrynameinput:"  | pv -qL 80
+    echo
+    # Edition de l'entrée avec nano (flèches directionnelles supportées)
+    if [ -n "$entryfolderinput" ]; then
+        nano "$BASE_DIR/entries/$entryfolderinput/$entrynameinput"
+        cat "$BASE_DIR/entries/$entryfolderinput/$entrynameinput"
+    else
+        nano "$BASE_DIR/entries/$entrynameinput"
+        cat "$BASE_DIR/entries/$entrynameinput"
+    fi
+    clear
     play -q $BASE_DIR/ui_hacking_charenter_01.wav
     repeatmainmenufunc
-    ;;
-        *)
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    ;;
-    esac
-    
-    #displays menu text again
-    clear
-   display_center "$BASE_DIR/greeterheader.txt"
-   echo "$greeter"
-    echo
-    play -q $BASE_DIR/ui_hacking_charscroll.wav
-    echo "Delete $readoption? Type YES to continue"  | pv -qL 80
-    play -q $BASE_DIR/ui_hacking_charscroll.wav
-    
-    #detects user input if they typed in "yes". case insensitive as it converts it to all caps
-    read confirmdeletion
-     if  [[ ${confirmdeletion^^} == "YES" ]]
-     then
-     rm -f "$BASE_DIR/entries/$readoption"
-     play -q $BASE_DIR/ui_hacking_charenter_01.wav
-     echo FILE DELETED!
-     play -q  $BASE_DIR/ui_hacking_passgood.wav
-     sleep 0.1
-                repeatmainmenufunc
-                
-            #if something other than yes was typed in
-        else
-        echo OPERATION CANCELLED
-        play -q $BASE_DIR/ui_hacking_charenter_01.wav
-        play -q  $BASE_DIR/ui_hacking_passbad.wav
-        sleep 0.2
-        
-        #goes back to main menu
-        repeatmainmenufunc
+}
+
+#menu to edit an entry
+editentryfunc () {
+    local current_path="$1"
+    [ -z "$current_path" ] && current_path="."
+    local abs_path="$BASE_DIR/entries/$current_path"
+    local entries=("Go Back")
+    # Fichiers en minuscules
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        entries+=("$(echo "$f" | tr '[:upper:]' '[:lower:]')")
+    done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type f -printf '%f\n')
+    # Dossiers en MAJUSCULES
+    while IFS= read -r d; do
+        [ -z "$d" ] && continue
+        [ "$d" = "." ] && continue
+        dname="$(basename "$d")"
+        if [ "$dname" != "$(basename "$abs_path")" ]; then
+            entries+=("$(echo "$dname" | tr '[:lower:]' '[:upper:]')")
         fi
-        done
+    done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+
+    clear
+    display_center "$BASE_DIR/greeterheader.txt"
+    echo "$greeter"
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    echo "Quel fichier voulez-vous éditer ?" | pv -qL 80
+    choice=$(printf "%s\n" "${entries[@]}" | fzf --height=10 --border --reverse --no-multi --prompt="" --bind 'tab:accept')
+    case $choice in
+        "Go Back"|$'\t')
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            if [ "$current_path" = "." ]; then
+                repeatmainmenufunc
+            else
+                parent_path="${current_path%/*}"
+                [ -z "$parent_path" -o "$parent_path" = "$current_path" ] && parent_path="."
+                editentryfunc "$parent_path"
+            fi
+            ;;
+        "")
+            repeatmainmenufunc
+            ;;
+        *)
+            # Si le choix est en MAJUSCULES, c'est un dossier
+            if [[ "$choice" =~ ^[A-Z0-9_-]+$ ]]; then
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                folder_name="$choice"
+                real_folder=""
+                while IFS= read -r d; do
+                    dname="$(basename "$d")"
+                    if [ "$(echo "$dname" | tr '[:lower:]' '[:upper:]')" = "$folder_name" ]; then
+                        real_folder="$dname"
+                        break
+                    fi
+                done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+                if [ "$current_path" = "." ]; then
+                    editentryfunc "$real_folder"
+                else
+                    editentryfunc "$current_path/$real_folder"
+                fi
+            else
+                # fichier (toujours en minuscules)
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                clear
+                display_center "$BASE_DIR/greeterheader.txt"
+                echo "$greeter"
+                echo
+                play -q $BASE_DIR/ui_hacking_charscroll.wav
+                echo "Current content of $choice:" | pv -qL 80
+                play -q $BASE_DIR/ui_hacking_charscroll.wav
+                real_file=""
+                while IFS= read -r f; do
+                    if [ "$(echo "$f" | tr '[:upper:]' '[:lower:]')" = "$choice" ]; then
+                        real_file="$f"
+                        break
+                    fi
+                done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type f -printf '%f\n')
+                if [ "$current_path" = "." ]; then
+                    cat "$BASE_DIR/entries/$real_file" | pv -qL 80
+                else
+                    cat "$BASE_DIR/entries/$current_path/$real_file" | pv -qL 80
+                fi
+                echo
+                echo "Appuyez sur Ctrl+X pour sauvegarder et quitter nano." | pv -qL 80
+                play -q $BASE_DIR/ui_hacking_charscroll.wav
+                echo "$choice:" | pv -qL 80
+                echo
+                if [ "$current_path" = "." ]; then
+                    nano "$BASE_DIR/entries/$real_file"
+                    cat "$BASE_DIR/entries/$real_file"
+                else
+                    nano "$BASE_DIR/entries/$current_path/$real_file"
+                    cat "$BASE_DIR/entries/$current_path/$real_file"
+                fi
+                clear
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                repeatmainmenufunc
+            fi
+            ;;
+    esac
+}
+
+#menu to delete an entry
+deleteentryfunc () {
+    local current_path="$1"
+    [ -z "$current_path" ] && current_path="."
+    local abs_path="$BASE_DIR/entries/$current_path"
+    local entries=("Go Back")
+    # Fichiers en minuscules
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        entries+=("$(echo "$f" | tr '[:upper:]' '[:lower:]')")
+    done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type f -printf '%f\n')
+    # Dossiers en MAJUSCULES
+    while IFS= read -r d; do
+        [ -z "$d" ] && continue
+        [ "$d" = "." ] && continue
+        dname="$(basename "$d")"
+        if [ "$dname" != "$(basename "$abs_path")" ]; then
+            entries+=("$(echo "$dname" | tr '[:lower:]' '[:upper:]')")
+        fi
+    done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+
+    clear
+    display_center "$BASE_DIR/greeterheader.txt"
+    echo "$greeter"
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    echo "Quel fichier voulez-vous supprimer ?" | pv -qL 80
+    choice=$(printf "%s\n" "${entries[@]}" | fzf --height=10 --border --reverse --no-multi --prompt="" --bind 'tab:accept')
+    case $choice in
+        "Go Back"|$'\t')
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            if [ "$current_path" = "." ]; then
+                repeatmainmenufunc
+            else
+                parent_path="${current_path%/*}"
+                [ -z "$parent_path" -o "$parent_path" = "$current_path" ] && parent_path="."
+                deleteentryfunc "$parent_path"
+            fi
+            ;;
+        "")
+            repeatmainmenufunc
+            ;;
+        *)
+            # Si le choix est en MAJUSCULES, c'est un dossier
+            if [[ "$choice" =~ ^[A-Z0-9_-]+$ ]]; then
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                folder_name="$choice"
+                real_folder=""
+                while IFS= read -r d; do
+                    dname="$(basename "$d")"
+                    if [ "$(echo "$dname" | tr '[:lower:]' '[:upper:]')" = "$folder_name" ]; then
+                        real_folder="$dname"
+                        break
+                    fi
+                done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+                if [ "$current_path" = "." ]; then
+                    deleteentryfunc "$real_folder"
+                else
+                    deleteentryfunc "$current_path/$real_folder"
+                fi
+            else
+                # fichier (toujours en minuscules)
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                clear
+                display_center "$BASE_DIR/greeterheader.txt"
+                echo "$greeter"
+                echo
+                play -q $BASE_DIR/ui_hacking_charscroll.wav
+                echo "Delete $choice? Type YES to continue"  | pv -qL 80
+                play -q $BASE_DIR/ui_hacking_charscroll.wav
+                real_file=""
+                while IFS= read -r f; do
+                    if [ "$(echo "$f" | tr '[:upper:]' '[:lower:]')" = "$choice" ]; then
+                        real_file="$f"
+                        break
+                    fi
+                done < <(find "$abs_path" -maxdepth 1 -mindepth 1 -type f -printf '%f\n')
+                read confirmdeletion
+                if  [[ ${confirmdeletion^^} == "YES" ]]; then
+                    if [ "$current_path" = "." ]; then
+                        rm -f "$BASE_DIR/entries/$real_file"
+                    else
+                        rm -f "$BASE_DIR/entries/$current_path/$real_file"
+                    fi
+                    play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                    echo FILE DELETED!
+                    play -q  $BASE_DIR/ui_hacking_passgood.wav
+                    sleep 0.1
+                    repeatmainmenufunc
+                else
+                    echo OPERATION CANCELLED
+                    play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                    play -q  $BASE_DIR/ui_hacking_passbad.wav
+                    sleep 0.2
+                    repeatmainmenufunc
+                fi
+            fi
+            ;;
+    esac
+}
+
+#This is a part i added myself to get menu for the holotape games
+holotapemenufunc ()
+{
+    while true; do
+        clear
+        display_center "$BASE_DIR/greeterheader.txt"
+        echo "$greeter" 
+        play -q $BASE_DIR/ui_hacking_charscroll.wav
+        echo "Sélectionnez une cartouche Holotape à lancer :" | pv -qL 80
+        holotape_dir="$BASE_DIR/holotapes"
+        mapfile -t holotapes < <(find "$holotape_dir" -maxdepth 1 -type f -executable -printf "%f\n")
+        holotapes+=("Retour au Terminal")
+        if [ ${#holotapes[@]} -eq 1 ]; then
+            echo "No holotape games found." | pv -qL 80
+            play -q $BASE_DIR/ui_hacking_passbad.wav
+            sleep 1
+            repeatmainmenufunc
+            return
+        fi
+        selected_game=$(printf "%s\n" "${holotapes[@]}" | fzf --height=10 --border --reverse --no-multi --prompt="" --bind 'tab:accept')
+        case $selected_game in
+            "Retour au Terminal"|"")
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                repeatmainmenufunc
+                return
+                ;;
+            *)
+                play -q $BASE_DIR/ui_hacking_charenter_01.wav
+                "$holotape_dir/$selected_game"
+                # Après la fin du jeu, la boucle recommence
+                ;;
+        esac
+    done
 }
 
 #same as main menu screen function, but without the annoying animations
 repeatmainmenufunc ()
 {
-clear
+ 
 
-display_center "$BASE_DIR/greeterheader.txt"
-echo "$greeter" 
-play -q $BASE_DIR/ui_hacking_charscroll.wav
-echo What would you like to do? | pv -qL 80
-COLUMNS=12
-select menuchoice in "View Journal Entries" "Log a Journal Entry" "Delete a Journal Entry" "Proceed to Desktop"
-do
+    clear
+    display_center "$BASE_DIR/greeterheader.txt"
+    echo "$greeter" 
+    play -q $BASE_DIR/ui_hacking_charscroll.wav
+    echo What would you like to do? | pv -qL 80
+    actions=("View Journal Entries" "Log a Journal Entry" "Delete a Journal Entry" "Edit a Journal Entry" "Load Holotape" "Proceed to Desktop")
+    menuchoice=$(printf "%s\n" "${actions[@]}" | fzf --height=10 --border --reverse --no-multi --prompt="" --disabled)
     case $menuchoice in
-    "View Journal Entries")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    viewentriesfunc
-    ;;
-    "Log a Journal Entry")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-   writeentryfunc
-    ;;
-    "Delete a Journal Entry")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    deleteentryfunc
-    ;;
-    "Proceed to Desktop")
-    play -q $BASE_DIR/ui_hacking_charenter_01.wav
-    echo Goodbye! && exit
-    ;;
-    *)
-    play -q $BASE_DIR/ui_hacking_passbad.wav
-    ;;
+        "View Journal Entries")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            viewentriesfunc
+            ;;
+        "Log a Journal Entry")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            writeentryfunc
+            ;;
+        "Delete a Journal Entry")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            deleteentryfunc
+            ;;
+        "Edit a Journal Entry")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            editentryfunc
+            ;;
+        "Load Holotape")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            holotapemenufunc
+            ;;
+        "Proceed to Desktop")
+            play -q $BASE_DIR/ui_hacking_charenter_01.wav
+            echo Goodbye! && exit
+            ;;
+        *)
+            play -q $BASE_DIR/ui_hacking_passbad.wav
+            ;;
     esac
-done
 }
 
 
@@ -292,6 +532,13 @@ echo $'
 echo "==============================================" | pv -qL 50
 play -q $BASE_DIR/ui_hacking_passgood.wav
 sleep 1
+
+
+# Si appelé avec 'holotapemenufunc', lancer directement ce menu
+if [[ "$1" == "holotapemenufunc" ]]; then
+    holotapemenufunc
+    exit 0
+fi
 
 #goes to the main menu
 mainmenufunc;
